@@ -17,7 +17,7 @@ def load_model():
 
 pipeline = load_model()
 
-st.title("Mountain Airbnb Profit Predictor")
+st.title("Piedmont/Central Airbnb Profit Predictor")
 st.write("Enter listing details to estimate revenue:")
 
 # Input selectors
