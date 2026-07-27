@@ -5,7 +5,7 @@ import pickle
 @st.cache_resource
 def load_model():
     try:
-        with open("beaches.pkl", "rb") as f:
+        with open("beach.pkl", "rb") as f:
             model = pickle.load(f)
         return model
     except FileNotFoundError:
