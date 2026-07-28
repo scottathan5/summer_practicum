@@ -9,7 +9,7 @@ def load_model():
             model = pickle.load(f)
         return model
     except FileNotFoundError:
-        st.error("Model file not found. Ensure 'mountainapp.pkl' is pushed to GitHub.")
+        st.error("Model file not found. Ensure 'beach.pkl' is present in your repo.")
         return None
     except Exception as e:
         st.error(f"Error loading model: {e}")
@@ -28,9 +28,6 @@ MONTH_MAP = {
 selected_month_str = st.selectbox("Select start month", list(MONTH_MAP.keys()))
 selected_month = MONTH_MAP[selected_month_str]
 
-REGION = ('Mountain', 'Piedmont/Central', 'Beach')
-selected_region = st.selectbox("Select region", REGION)
-
 TYPE = ('entire_home', 'hotel_room', 'unique_location', 'private_room')
 room_type = st.selectbox("Select room type", TYPE)
 
@@ -41,7 +38,7 @@ beds = st.number_input("Number of beds", min_value=0, value=2, step=1)
 baths = st.number_input("Number of bathrooms", min_value=0.0, value=1.5, step=0.5)
 
 managed_str = st.selectbox("Will it be professionally managed?", ('True', 'False'))
-managed = True if managed_str == 'True' else False
+managed = 1 if managed_str == 'True' else 0
 
 nights = st.number_input("Minimum stay (nights)", min_value=1, value=2, step=1)
 
@@ -53,40 +50,53 @@ if st.button("Predict Revenue"):
     if pipeline is None:
         st.error("Model is not loaded.")
     else:
-        # Create single-row DataFrame matching raw training columns
-        input_data = pd.DataFrame({
-            "STARTmonth": [selected_month],
-            "region_x": [selected_region],
-            "room_type": [room_type],
-            "photos_count": [photo_count],
-            "guests": [guest_count],
-            "bedrooms": [bedroom],
-            "beds": [beds],
-            "baths": [baths],
-            "professional_management": [managed],
-            "min_nights": [nights],
-            "City": [city]
-        })
+        # Build dictionary explicitly matching exact model feature names
+        input_dict = {
+            'photos_count': photo_count,
+            'guests': guest_count,
+            'bedrooms': bedroom,
+            'beds': beds,
+            'baths': baths,
+            'professional_management': managed,
+            'min_nights': nights,
+            
+            # Start Month dummies (1 through 11; Dec/12 is implicitly all 0s)
+            'STARTmonth_1': 1 if selected_month == 1 else 0,
+            'STARTmonth_2': 1 if selected_month == 2 else 0,
+            'STARTmonth_3': 1 if selected_month == 3 else 0,
+            'STARTmonth_4': 1 if selected_month == 4 else 0,
+            'STARTmonth_5': 1 if selected_month == 5 else 0,
+            'STARTmonth_6': 1 if selected_month == 6 else 0,
+            'STARTmonth_7': 1 if selected_month == 7 else 0,
+            'STARTmonth_8': 1 if selected_month == 8 else 0,
+            'STARTmonth_9': 1 if selected_month == 9 else 0,
+            'STARTmonth_10': 1 if selected_month == 10 else 0,
+            'STARTmonth_11': 1 if selected_month == 11 else 0,
+            
+            # Room Type dummies ('entire_home' is implicitly all 0s)
+            'room_type_hotel_room': 1 if room_type == 'hotel_room' else 0,
+            'room_type_private_room': 1 if room_type == 'private_room' else 0,
+            'room_type_unique_location': 1 if room_type == 'unique_location' else 0,
+            
+            # City dummy
+            'City_Gatlinburg': 1 if city == 'Gatlinburg' else 0
+        }
 
-        # Apply same get_dummies transformation used in training notebook
-        input_encoded = pd.get_dummies(
-            input_data, 
-            columns=['STARTmonth', 'region_x', 'room_type', 'City'], 
-            drop_first=True
-        )
+        # Convert to DataFrame
+        input_df = pd.DataFrame([input_dict])
 
-        # Retrieve feature names saved in the pipeline's scaler or model step
+        # Verify feature order expected by scaler or pipeline
         try:
             model_features = pipeline.named_steps['scaler'].feature_names_in_
         except AttributeError:
-            model_features = getattr(pipeline, "feature_names_in_", None)
+            model_features = getattr(pipeline, "feature_names_in_", input_df.columns)
 
-        if model_features is not None:
-            # Reindex to enforce exact training column ordering and fill missing dummy columns with 0
-            input_encoded = input_encoded.reindex(columns=model_features, fill_value=0)
-            
-            # Predict
-            prediction = pipeline.predict(input_encoded)[0]
+        # Enforce exact column order
+        input_df = input_df.reindex(columns=model_features, fill_value=0)
+
+        # Predict
+        try:
+            prediction = pipeline.predict(input_df)[0]
             st.success(f"Estimated Monthly Revenue: **${prediction:,.2f}**")
-        else:
-            st.error("Feature names could not be loaded from pipeline. Re-export model using a Pipeline.")
+        except Exception as e:
+            st.error(f"Prediction error: {e}")
